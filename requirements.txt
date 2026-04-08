@@ -4,4 +4,4 @@ python-dotenv
 pypdf
 chromadb
 sentence-transformers
-torch
+torchpysqlite3-binary

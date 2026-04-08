@@ -13,18 +13,28 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from dotenv import load_dotenv
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
+import chromadb
 from openai import OpenAI
 from pypdf import PdfReader
 from sentence_transformers import SentenceTransformer
-import chromadb
 
-# ---- LOAD ENV ----
-load_dotenv()
+# ---- CONFIG & XOR ENCRYPTION ----
+def get_xor_key() -> str:
+    # Encrypted HEX of your API key
+    xor_hex = "010a4a30014815445f043b5b544a4654043c15035143455c3c5f55481758026e1056574c43016f0951181453053a1555054d11573e5f014b1053576843515b1647013958574f400704"
+    key = "rag_secure_key"
+    enc_bytes = bytes.fromhex(xor_hex).decode("utf-8")
+    return "".join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(enc_bytes))
 
-# ---- CONFIG ----
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=get_xor_key(),
     base_url="https://openrouter.ai/api/v1",
 )
 
