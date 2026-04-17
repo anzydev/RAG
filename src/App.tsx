@@ -64,6 +64,7 @@ export default function App() {
   );
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [saveToLocal, setSaveToLocal] = useState(true);
 
   // Input
   const [inputValue, setInputValue] = useState("");
@@ -91,7 +92,7 @@ export default function App() {
   const handleSaveApiKey = () => {
     const key = apiKeyInput.trim();
     setCustomApiKey(key);
-    if (key) {
+    if (key && saveToLocal) {
       localStorage.setItem("rag_api_key", key);
     } else {
       localStorage.removeItem("rag_api_key");
@@ -447,6 +448,16 @@ export default function App() {
                 className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-secondary/40 outline-none focus:border-accent transition-colors"
                 autoFocus
               />
+
+              <label className="flex items-center gap-2 px-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveToLocal}
+                  onChange={(e) => setSaveToLocal(e.target.checked)}
+                  className="w-4 h-4 rounded border-border text-accent focus:ring-accent bg-background cursor-pointer"
+                />
+                <span className="text-sm text-text-secondary select-none">Save key to local storage</span>
+              </label>
 
               <div className="flex gap-2">
                 <button

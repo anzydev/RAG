@@ -33,3 +33,4 @@ Thumbs.db
 # Agent/AI
 .gemini/
 .agents/
+.vercel
