@@ -1,8 +1,4 @@
-streamlit
 openai
-python-dotenv
 pypdf
-chromadb
-sentence-transformers
-torch
-pysqlite3-binary
+numpy
+python-dotenv

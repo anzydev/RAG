@@ -9,8 +9,13 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
-dist/
 build/
+
+# Node
+node_modules/
+
+# Build output
+dist/
 
 # IDE
 .vscode/
@@ -18,9 +23,13 @@ build/
 *.swp
 *.swo
 
-# ChromaDB local data
-chroma_data/
+# Vercel
+.vercel/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent/AI
+.gemini/
+.agents/

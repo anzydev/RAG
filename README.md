@@ -1,84 +1,142 @@
 # 🧠 RAG Assistant
 
-A premium, AI-powered Retrieval-Augmented Generation (RAG) assistant that lets you upload documents and ask intelligent questions grounded in your content.
+A full-stack **Retrieval-Augmented Generation** application. Upload documents, get AI summaries, and ask questions — answers are grounded in your uploaded content with source citations.
 
-![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.30+-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
-![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-green?style=flat-square)
-![OpenRouter](https://img.shields.io/badge/OpenRouter-GPT--4o--mini-blue?style=flat-square)
-
----
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![Python](https://img.shields.io/badge/Python-3.11+-green?logo=python)
+![Vite](https://img.shields.io/badge/Vite-6-purple?logo=vite)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## ✨ Features
 
-- **📄 Multi-format Upload** — Supports PDF and TXT files
-- **🔍 Semantic Search** — Finds the most relevant chunks using sentence embeddings
-- **💬 Chat Interface** — Conversational Q&A with full history
-- **📚 Source Attribution** — See exactly which document chunks were used
-- **📝 Document Summary** — One-click summarization of all uploaded content
-- **🎨 Premium UI** — Dark-themed glassmorphism design with animations
+- 📄 **Multi-format upload** — PDF, TXT, and Markdown support
+- 🧩 **Smart chunking** — Sentence-boundary-aware text splitting with overlap
+- 🔍 **Semantic search** — Embeddings + cosine similarity retrieval
+- 🤖 **RAG Q&A** — Ask questions and get cited, context-grounded answers
+- 📝 **AI summaries** — Auto-generated document overviews
+- 💬 **Conversation memory** — Follow-up questions with history context
+- 📚 **Source citations** — Shows which document and page each answer came from
+- 🔑 **Bring your own key** — Use your own OpenRouter API key from the UI
+- 🌙 **Dark UI** — Clean, minimal chat interface
 
-## 🏗️ Architecture
+## 🏗 Architecture
 
 ```
-User Upload → PDF/TXT Parsing → Text Chunking (500 chars, 50 overlap)
-    → Embedding (all-MiniLM-L6-v2) → ChromaDB Vector Store
-
-User Query → Query Embedding → Semantic Retrieval (top 3)
-    → Context + History → GPT-4o-mini via OpenRouter → Answer
+Frontend (React + Vite + TypeScript + Tailwind)
+   ↕  HTTP API  ↕
+Backend (Python serverless functions)
+   ↕  OpenRouter API  ↕
+LLM (GPT-4o-mini) + Embeddings (text-embedding-3-small)
 ```
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+- **Node.js** 18+
+- **Python** 3.11+
+- **OpenRouter API key** — [get one free](https://openrouter.ai/keys)
+
 ### 1. Clone & Install
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/anzydev/RAG.git
 cd RAG
-python -m venv venv
-source venv/bin/activate   # macOS/Linux
+
+# Frontend
+npm install
+
+# Backend
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 2. Configure
 
-Create a `.env` file:
-
-```env
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+```bash
+# Create .env with your API key
+echo "OPENROUTER_API_KEY=sk-or-v1-your-key-here" > .env
 ```
 
-Get your API key from [openrouter.ai](https://openrouter.ai/).
+> **Tip:** You can also set your API key from the UI using the **API Key** button (bottom-left corner).
 
 ### 3. Run
 
 ```bash
-streamlit run app.py
+# Option A: Start both servers at once
+./start.sh
+
+# Option B: Start separately
+# Terminal 1 — Backend
+source venv/bin/activate
+python dev_server.py
+
+# Terminal 2 — Frontend
+npm run dev
 ```
 
-The app opens at `http://localhost:8501`.
+Open **http://localhost:5173** in your browser.
 
-## 📦 Dependencies
+## 🌐 Deploy to Vercel
 
-| Package | Purpose |
-|---------|---------|
-| `streamlit` | Web UI framework |
-| `openai` | OpenRouter API client |
-| `python-dotenv` | Environment variable loading |
-| `pypdf` | PDF text extraction |
-| `chromadb` | Vector database |
-| `sentence-transformers` | Local embedding model |
-| `torch` | ML backend for embeddings |
+```bash
+# Install Vercel CLI
+npm i -g vercel
 
-## 🔧 Configuration
+# Deploy
+vercel
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Chunk size | 500 chars | Size of each text chunk |
-| Chunk overlap | 50 chars | Overlap between chunks |
-| Embedding model | `all-MiniLM-L6-v2` | HuggingFace sentence transformer |
-| LLM | `openai/gpt-4o-mini` | via OpenRouter |
-| Top-K results | 3 | Number of chunks retrieved |
+# Set your API key (or let users bring their own via UI)
+vercel env add OPENROUTER_API_KEY
+```
+
+## 📁 Project Structure
+
+```
+RAG/
+├── api/                     # Python serverless functions (Vercel)
+│   ├── _lib/
+│   │   ├── config.py        # API keys, model config, limits
+│   │   ├── rag_engine.py    # Core RAG pipeline
+│   │   └── session_store.py # Session persistence
+│   ├── index.py             # GET  /api         → Health check
+│   ├── upload.py            # POST /api/upload   → Upload & index
+│   ├── chat.py              # POST /api/chat     → Ask questions
+│   └── summarize.py         # POST /api/summarize → AI summary
+├── src/                     # React frontend
+│   ├── App.tsx              # Main application
+│   ├── components/ui/       # UI components
+│   ├── hooks/               # React hooks
+│   └── lib/                 # Utilities
+├── dev_server.py            # Local dev API server
+├── start.sh                 # Start both servers
+├── vercel.json              # Vercel deployment config
+├── PIPELINE.md              # Full pipeline documentation
+└── package.json             # Frontend dependencies
+```
+
+## 🔧 Pipeline
+
+See **[PIPELINE.md](./PIPELINE.md)** for the full ingestion-to-retrieval pipeline documentation covering:
+
+1. **Ingest** — Parse PDF/TXT/Markdown files
+2. **Chunk** — Sentence-boundary splitting (800 chars, 150 overlap)
+3. **Embed** — OpenRouter `text-embedding-3-small` (1536 dims)
+4. **Store** — Session-based persistence
+5. **Retrieve** — Cosine similarity top-25 + early-page injection
+6. **Generate** — GPT-4o-mini with RAG context + conversation memory
+
+## 📜 API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api` | Health check |
+| `POST` | `/api/upload` | Upload & index documents (multipart/form-data) |
+| `POST` | `/api/chat` | Ask a question (`{ question, session_id, history }`) |
+| `POST` | `/api/summarize` | Generate AI summary (`{ session_id }`) |
+
+All endpoints accept an optional `X-Api-Key` header to use a custom OpenRouter key.
 
 ## 📄 License
 
