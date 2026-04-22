@@ -151,12 +151,11 @@ export default function App() {
         next[idx] = { ...next[idx], ...threadData, updatedAt: Date.now() };
       } else {
         next.unshift({
-           id: threadData.id,
-           title: threadData.title || "New Chat",
-           sessionId: threadData.sessionId || "",
-           messages: threadData.messages || [],
-           filenames: threadData.filenames || [],
-           chunkCount: threadData.chunkCount || 0,
+           title: "New Chat",
+           sessionId: "",
+           messages: [],
+           filenames: [],
+           chunkCount: 0,
            updatedAt: Date.now(),
            ...threadData
         } as ChatThread);
