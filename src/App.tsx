@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ui/chat-message";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -54,6 +55,8 @@ interface ChatThread {
 
 // ---- App ----
 export default function App() {
+  const [isAppLoading, setIsAppLoading] = useState(true);
+
   const [threads, setThreads] = useState<ChatThread[]>(() => {
     try { return JSON.parse(localStorage.getItem("rag_threads") || "[]"); }
     catch { return []; }
@@ -94,6 +97,15 @@ export default function App() {
   const chunkCount = activeThread?.chunkCount || 0;
   const filenames = activeThread?.filenames || [];
   const docsLoaded = !!sessionId;
+
+  // Initial random loading sequence (4 to 5s)
+  useEffect(() => {
+    const randomMs = Math.floor(Math.random() * (5000 - 4000 + 1) + 4000);
+    const timer = setTimeout(() => {
+      setIsAppLoading(false);
+    }, randomMs);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -343,6 +355,10 @@ export default function App() {
   };
 
   const hasMessages = messages.length > 0;
+
+  if (isAppLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <div className="h-screen flex overflow-hidden bg-background">

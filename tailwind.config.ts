@@ -22,6 +22,8 @@ export default {
         "slide-up": "slideUp 0.3s ease-out",
         "pulse-slow": "pulse 2s ease-in-out infinite",
         "bounce-dot": "bounceDot 1.4s ease-in-out infinite",
+        "wave": "wave 5s linear infinite",
+        "wave-reverse": "wave 7s linear infinite reverse",
       },
       keyframes: {
         fadeIn: {
@@ -35,6 +37,14 @@ export default {
         bounceDot: {
           "0%, 80%, 100%": { transform: "scale(0)" },
           "40%": { transform: "scale(1)" },
+        },
+        wave: {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
+        rise: {
+          "0%": { top: "80%" },
+          "100%": { top: "-20%" },
         },
       },
     },
