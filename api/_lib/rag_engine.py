@@ -10,6 +10,7 @@ import numpy as np
 from openai import OpenAI
 from pypdf import PdfReader
 from io import BytesIO
+import concurrent.futures
 
 from .config import (
     OPENROUTER_API_KEY,
@@ -131,18 +132,31 @@ def get_embeddings(texts: list[str], api_key: str | None = None) -> list[list[fl
 
     all_embeddings = []
     batch_size = 100
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        try:
-            response = client.embeddings.create(
-                model=EMBEDDING_MODEL,
-                input=batch,
-            )
-            batch_embeddings = [item.embedding for item in response.data]
-            all_embeddings.extend(batch_embeddings)
-        except Exception as e:
-            print(f"  ✗ Embedding API error on batch {i//batch_size}: {e}")
-            raise Exception(f"Embedding API failed: {e}")
+    batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+
+    def fetch_batch(batch):
+        return client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=batch,
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_idx = {executor.submit(fetch_batch, batch): idx for idx, batch in enumerate(batches)}
+        
+        # Collect results in order ensuring alignment with original texts indexing
+        results = [None] * len(batches)
+        for future in concurrent.futures.as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                response = future.result()
+                results[idx] = [item.embedding for item in response.data]
+            except Exception as e:
+                print(f"  ✗ Embedding API error on batch {idx}: {e}")
+                raise Exception(f"Embedding API failed: {e}")
+
+    for res in results:
+        if res is not None:
+            all_embeddings.extend(res)
 
     if not all_embeddings:
         raise Exception("No embeddings were generated. Check your API key and credits.")
@@ -252,16 +266,17 @@ def generate_answer(
     recent = history[-6:] if history else []
     conv = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in recent)
 
-    prompt = f"""You are a friendly AI assistant with access to uploaded documents.
+    prompt = f"""You are a document-focused AI assistant. Answer the user's questions based on the provided documents.
 
 BEHAVIOR RULES:
-- If the user sends a casual message (greetings like "hi", "hello", "how are you", small talk, etc.), respond naturally and conversationally. Do NOT reference the documents or context for casual messages.
-- Only use the CONTEXT below when the user asks a question that is clearly about the documents or their content.
-- When answering document questions, cite page numbers and source filenames (e.g. "In document.pdf, on page 5...").
-- Use markdown formatting: headers, bullet points, bold for key terms.
-- If the user asks about documents but the context doesn't contain relevant info, say so honestly.
+- You MUST base your factual answers on the provided CONTEXT.
+- Do NOT hallucinate facts or invent outside knowledge.
+- If the CONTEXT contains relevant but partial information (e.g. asking to summarize a whole chapter but you only see a few pages), provide the best answer you can from what is available, and note that you only have partial extracts.
+- If the question is completely unrelated and NOT answered by the CONTEXT at all, precisely reply with "This information is not provided in the document."
+- When possible, cite page numbers and source filenames (e.g. "In document.pdf, on page 5...").
+- Use markdown formatting.
 
-CONTEXT (use ONLY for document-related questions):
+CONTEXT:
 {context}
 
 CONVERSATION HISTORY:
@@ -275,7 +290,7 @@ ANSWER:"""
         model=CHAT_MODEL,
         max_tokens=MAX_RESPONSE_TOKENS,
         messages=[
-            {"role": "system", "content": "You are a friendly, helpful AI assistant. You have access to uploaded documents. For casual conversation (greetings, small talk), respond naturally without mentioning documents. For document-related questions, provide thorough answers with page numbers and source citations."},
+            {"role": "system", "content": "You are a strict AI assistant. You must ONLY answer questions based on the provided uploaded documents. Refuse to answer anything else."},
             {"role": "user", "content": prompt},
         ],
     )
