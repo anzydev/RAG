@@ -14,7 +14,8 @@ import {
   Key,
   Check,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  Menu
 } from "lucide-react";
 
 // ---- Helpers ----
@@ -79,6 +80,9 @@ export default function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [saveToLocal, setSaveToLocal] = useState(true);
+
+  // Mobile sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Input
   const [inputValue, setInputValue] = useState("");
@@ -372,19 +376,39 @@ export default function App() {
         className="hidden"
       />
 
+      {/* ===== MOBILE SIDEBAR OVERLAY ===== */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ===== SIDEBAR ===== */}
-      <div className="w-[260px] bg-surface/50 border-r border-border flex flex-col shrink-0 transition-all duration-300">
-        <div className="p-3 border-b border-border">
+      <div className={cn(
+        "w-[260px] bg-surface/50 border-r border-border flex flex-col shrink-0 transition-all duration-300",
+        "fixed inset-y-0 left-0 z-50 md:static md:z-auto",
+        sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <div className="p-3 border-b border-border flex items-center gap-2">
           <button 
             onClick={() => {
                setActiveThreadId(null);
                setShowSummary(false);
                setSummary(null);
+               setSidebarOpen(false);
             }}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-text-primary text-background rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-text-primary text-background rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
           >
             <Plus className="w-4 h-4" />
             New Chat
+          </button>
+          {/* Close sidebar button (mobile only) */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors shrink-0"
+          >
+            <X className="w-5 h-5" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 py-4 space-y-1 custom-scrollbar">
@@ -395,7 +419,7 @@ export default function App() {
           {threads.map((t) => (
             <button
               key={t.id}
-              onClick={() => setActiveThreadId(t.id)}
+              onClick={() => { setActiveThreadId(t.id); setSidebarOpen(false); }}
               className={cn(
                 "w-full flex items-center justify-between group px-3 py-2.5 rounded-xl text-[13px] transition-all",
                 activeThreadId === t.id 
@@ -438,11 +462,23 @@ export default function App() {
       </div>
 
       {/* ===== MAIN CONTENT View ===== */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background">
+      <main className="flex-1 flex flex-col min-w-0 bg-background w-full">
+        {/* Mobile top bar with hamburger */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-surface/30 shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-white/5 transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <h1 className="text-sm font-semibold text-text-primary truncate">
+            {activeThread?.title || "RAG Assistant"}
+          </h1>
+        </div>
         {!hasMessages && !showSummary ? (
           /* ========== LANDING VIEW ========== */
-          <div className="flex-1 flex flex-col items-center justify-center px-4">
-            <h1 className="text-2xl font-medium text-text-primary mb-8 animate-fade-in relative">
+          <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4">
+            <h1 className="text-lg sm:text-2xl font-medium text-text-primary mb-6 sm:mb-8 animate-fade-in relative text-center px-2">
               {docsLoaded ? `${filenames.length} file${filenames.length !== 1 ? "s" : ""} ready. Ask anything.` : "Ready when you are."}
             </h1>
 
@@ -510,7 +546,7 @@ export default function App() {
         ) : (
           /* ========== CHAT VIEW ========== */
           <>
-            <div className="flex-1 overflow-y-auto px-4 py-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-8 custom-scrollbar">
               <div className="max-w-3xl mx-auto space-y-6">
                 {/* Summary panel */}
                 {showSummary && summary && (
@@ -542,7 +578,7 @@ export default function App() {
             </div>
 
             {/* ---- Bottom input bar ---- */}
-            <div className="w-full bg-gradient-to-t from-background via-background/95 to-transparent pt-6 pb-6 px-4">
+            <div className="w-full bg-gradient-to-t from-background via-background/95 to-transparent pt-4 pb-4 sm:pt-6 sm:pb-6 px-3 sm:px-4">
               <div className="max-w-3xl mx-auto">
                 <div className="flex items-end bg-surface border border-border rounded-2xl px-2 py-2 transition-colors focus-within:border-border-hover shadow-lg">
                   {/* + button */}

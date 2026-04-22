@@ -21,14 +21,14 @@ export function ChatMessage({ role, content, sources, isLoading }: ChatMessagePr
   return (
     <div
       className={cn(
-        "flex gap-3 animate-slide-up",
+        "flex gap-2 sm:gap-3 animate-slide-up",
         isUser ? "flex-row-reverse" : "flex-row"
       )}
     >
       {/* Avatar */}
       <div
         className={cn(
-          "flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-sm",
+          "flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-sm",
           isUser
             ? "bg-accent/15 text-accent"
             : "bg-emerald-500/15 text-emerald-400"
@@ -40,7 +40,7 @@ export function ChatMessage({ role, content, sources, isLoading }: ChatMessagePr
       {/* Message bubble */}
       <div
         className={cn(
-          "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
+          "max-w-[90%] sm:max-w-[80%] rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 text-sm",
           isUser
             ? "bg-accent/10 border border-accent/20 text-text-primary"
             : "bg-surface border border-border text-text-primary"
