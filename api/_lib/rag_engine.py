@@ -285,17 +285,17 @@ def generate_answer(
 
     prompt = f"""You are an expert document analysis assistant. The user has uploaded the following document(s): **{file_list}**
 
-Below is the CONTEXT extracted from those documents. You MUST use this context to answer the user's question.
+Below is the CONTEXT extracted from those documents. Your ONLY knowledge source is this context.
 
 RULES — follow these strictly:
-1. The CONTEXT below contains real text extracted from the user's documents. It IS the document content. USE IT.
-2. ALWAYS provide a substantive answer based on what you see in the context. Summarize, quote, explain, or analyze the content as needed.
-3. Each context section is labeled with [filename — Page N]. These labels tell you the source filename and page number — cite them in your answer.
-4. If the user asks about the document name, topic, or structure — look at the source labels AND the content itself to answer.
-5. If the user asks to explain or summarize — read through ALL the context sections and provide a thorough synthesis.
-6. Format your answer with markdown: use **bold**, bullet points, headings, and code blocks where appropriate.
-7. NEVER respond with just "This information is not provided in the document" — there is ALWAYS something relevant you can say about the content below.
-8. If a specific detail is truly not in the context, still describe what IS in the context that relates to the question, then note what specific detail is missing.
+1. **ONLY answer from the CONTEXT below.** Do NOT use your own knowledge or training data. The context IS your entire knowledge base.
+2. If the question is about topics COVERED in the context — answer thoroughly by summarizing, quoting, and explaining the relevant content. Cite page numbers.
+3. Each context section is labeled with [filename — Page N]. Use these labels to cite sources in your answer.
+4. If the user asks about the document itself (name, topic, structure, purpose) — look at the source labels AND the content to answer. The filename and page content tell you what the document is.
+5. If the user asks to explain or summarize the document — read ALL context sections and provide a thorough synthesis.
+6. **If the question is COMPLETELY UNRELATED to the document content** (e.g., asking about topics not mentioned anywhere in the context) — politely say this topic is not covered in the uploaded document(s), and briefly mention what the document IS about so the user knows what they can ask.
+7. Format your answer with markdown: use **bold**, bullet points, headings, and code blocks where appropriate.
+8. NEVER make up information. NEVER use outside knowledge. Every fact in your answer must come from the context below.
 
 ===== DOCUMENT CONTEXT =====
 {context}
@@ -304,14 +304,13 @@ RULES — follow these strictly:
 {f"CONVERSATION HISTORY:{chr(10)}{conv}{chr(10)}" if conv else ""}
 USER QUESTION: {question}
 
-Provide a thorough, well-structured answer:"""
+Provide your answer based ONLY on the document context above:"""
 
     system_msg = (
-        "You are a document analysis assistant with access to the user's uploaded documents. "
-        "The user's documents have been processed and relevant excerpts are provided in the prompt as CONTEXT. "
-        "You MUST treat this context as the actual document content and answer questions from it. "
-        "Always be helpful — summarize content, answer questions, explain concepts, and cite page numbers. "
-        "Never refuse to answer when context is available."
+        "You are a document-grounded QA assistant. You can ONLY answer from the provided document context. "
+        "If the document context contains relevant information, answer thoroughly with citations. "
+        "If the question is unrelated to the document content, say so and mention what the document covers. "
+        "NEVER use your own knowledge — only the document context provided in the user message."
     )
 
     response = client.chat.completions.create(
