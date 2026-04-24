@@ -135,10 +135,23 @@ def get_embeddings(texts: list[str], api_key: str | None = None) -> list[list[fl
     batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
 
     def fetch_batch(batch):
-        return client.embeddings.create(
-            model=EMBEDDING_MODEL,
-            input=batch,
-        )
+        try:
+            return client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=batch,
+            )
+        except Exception as e:
+            err_str = str(e).lower()
+            if "connection" in err_str or "connect" in err_str or "timeout" in err_str:
+                raise Exception("Connection error. The embedding service may be temporarily unavailable. Please try again in a moment.")
+            elif "401" in err_str or "unauthorized" in err_str or "invalid" in err_str:
+                raise Exception("Invalid API key. Please check your OpenRouter API key and try again.")
+            elif "429" in err_str or "rate" in err_str:
+                raise Exception("Rate limit exceeded. Please wait a moment and try again.")
+            elif "insufficient" in err_str or "quota" in err_str or "credit" in err_str:
+                raise Exception("Insufficient API credits. Please top up your OpenRouter account.")
+            else:
+                raise Exception(f"Embedding service error: {e}")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         future_to_idx = {executor.submit(fetch_batch, batch): idx for idx, batch in enumerate(batches)}
@@ -152,7 +165,7 @@ def get_embeddings(texts: list[str], api_key: str | None = None) -> list[list[fl
                 results[idx] = [item.embedding for item in response.data]
             except Exception as e:
                 print(f"  ✗ Embedding API error on batch {idx}: {e}")
-                raise Exception(f"Embedding API failed: {e}")
+                raise
 
     for res in results:
         if res is not None:
@@ -258,6 +271,7 @@ def generate_answer(
     context: str,
     history: list[dict],
     api_key: str | None = None,
+    filenames: list[str] | None = None,
 ) -> str:
     """Generate an answer using the LLM with RAG context and conversation memory."""
     client = _get_client(api_key)
@@ -266,31 +280,46 @@ def generate_answer(
     recent = history[-6:] if history else []
     conv = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in recent)
 
-    prompt = f"""You are a document-focused AI assistant. Answer the user's questions based on the provided documents.
+    # Build filename reference for the model
+    file_list = ", ".join(filenames) if filenames else "uploaded document(s)"
 
-BEHAVIOR RULES:
-- You MUST base your factual answers on the provided CONTEXT.
-- Do NOT hallucinate facts or invent outside knowledge.
-- If the CONTEXT contains relevant but partial information (e.g. asking to summarize a whole chapter but you only see a few pages), provide the best answer you can from what is available, and note that you only have partial extracts.
-- If the question is completely unrelated and NOT answered by the CONTEXT at all, precisely reply with "This information is not provided in the document."
-- When possible, cite page numbers and source filenames (e.g. "In document.pdf, on page 5...").
-- Use markdown formatting.
+    prompt = f"""You are an expert document analysis assistant. The user has uploaded the following document(s): **{file_list}**
 
-CONTEXT:
+Below is the CONTEXT extracted from those documents. You MUST use this context to answer the user's question.
+
+RULES — follow these strictly:
+1. The CONTEXT below contains real text extracted from the user's documents. It IS the document content. USE IT.
+2. ALWAYS provide a substantive answer based on what you see in the context. Summarize, quote, explain, or analyze the content as needed.
+3. Each context section is labeled with [filename — Page N]. These labels tell you the source filename and page number — cite them in your answer.
+4. If the user asks about the document name, topic, or structure — look at the source labels AND the content itself to answer.
+5. If the user asks to explain or summarize — read through ALL the context sections and provide a thorough synthesis.
+6. Format your answer with markdown: use **bold**, bullet points, headings, and code blocks where appropriate.
+7. NEVER respond with just "This information is not provided in the document" — there is ALWAYS something relevant you can say about the content below.
+8. If a specific detail is truly not in the context, still describe what IS in the context that relates to the question, then note what specific detail is missing.
+
+===== DOCUMENT CONTEXT =====
 {context}
+===== END CONTEXT =====
 
-CONVERSATION HISTORY:
-{conv}
+{f"CONVERSATION HISTORY:{chr(10)}{conv}{chr(10)}" if conv else ""}
+USER QUESTION: {question}
 
-USER MESSAGE: {question}
+Provide a thorough, well-structured answer:"""
 
-ANSWER:"""
+    system_msg = (
+        "You are a document analysis assistant with access to the user's uploaded documents. "
+        "The user's documents have been processed and relevant excerpts are provided in the prompt as CONTEXT. "
+        "You MUST treat this context as the actual document content and answer questions from it. "
+        "Always be helpful — summarize content, answer questions, explain concepts, and cite page numbers. "
+        "Never refuse to answer when context is available."
+    )
 
     response = client.chat.completions.create(
         model=CHAT_MODEL,
         max_tokens=MAX_RESPONSE_TOKENS,
+        temperature=0.3,
         messages=[
-            {"role": "system", "content": "You are a strict AI assistant. You must ONLY answer questions based on the provided uploaded documents. Refuse to answer anything else."},
+            {"role": "system", "content": system_msg},
             {"role": "user", "content": prompt},
         ],
     )

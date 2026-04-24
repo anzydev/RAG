@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ui/chat-message";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import { Toast } from "@/components/ui/toast";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -83,6 +84,12 @@ export default function App() {
 
   // Mobile sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Toast notifications (replaces native alert())
+  const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
+  const showToast = useCallback((message: string, type: "error" | "success" | "info" = "error") => {
+    setToast({ message, type });
+  }, []);
 
   // Input
   const [inputValue, setInputValue] = useState("");
@@ -240,7 +247,12 @@ export default function App() {
       }
       setUploadProgress(100);
     } catch (err: any) {
-      alert(`Upload error: ${err.message}`);
+      const msg = err.message || "Upload failed";
+      if (msg.includes("Connection error")) {
+        showToast("Could not connect to the embedding service. Please check your API key or try again later.", "error");
+      } else {
+        showToast(`Upload error: ${msg}`, "error");
+      }
     } finally {
       setTimeout(() => { setUploading(false); setUploadProgress(0); }, 500);
     }
@@ -261,7 +273,7 @@ export default function App() {
       setSummary(data.summary);
       setShowSummary(true);
     } catch (err: any) {
-      alert(`Summary error: ${err.message}`);
+      showToast(`Summary error: ${err.message}`, "error");
     } finally {
       setSummaryLoading(false);
     }
@@ -336,7 +348,7 @@ export default function App() {
   const handleSubmit = () => {
     if (!inputValue.trim() || chatLoading) return;
     if (!docsLoaded || !sessionId) {
-      alert("Please upload a document first.");
+      showToast("Please upload a document first.", "info");
       return;
     }
     handleSend(inputValue.trim());
@@ -365,7 +377,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-background">
+    <div className="h-dvh flex overflow-hidden bg-background">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -462,7 +474,7 @@ export default function App() {
       </div>
 
       {/* ===== MAIN CONTENT View ===== */}
-      <main className="flex-1 flex flex-col min-w-0 bg-background w-full">
+      <main className="flex-1 flex flex-col min-w-0 bg-background w-full overflow-hidden">
         {/* Mobile top bar with hamburger */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border bg-surface/30 shrink-0">
           <button
@@ -477,14 +489,14 @@ export default function App() {
         </div>
         {!hasMessages && !showSummary ? (
           /* ========== LANDING VIEW ========== */
-          <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4">
-            <h1 className="text-lg sm:text-2xl font-medium text-text-primary mb-6 sm:mb-8 animate-fade-in relative text-center px-2">
+          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-4 pb-safe">
+            <h1 className="text-base sm:text-2xl font-medium text-text-primary mb-5 sm:mb-8 animate-fade-in relative text-center px-2">
               {docsLoaded ? `${filenames.length} file${filenames.length !== 1 ? "s" : ""} ready. Ask anything.` : "Ready when you are."}
             </h1>
 
             {/* Input bar */}
-            <div className="w-full max-w-[680px] animate-fade-in animate-delay-100">
-              <div className="flex items-center bg-surface border border-border rounded-full px-1.5 py-1.5 transition-colors focus-within:border-border-hover shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)]">
+            <div className="w-full max-w-[680px] animate-fade-in animate-delay-100 px-1">
+              <div className="flex items-center bg-surface border border-border rounded-full px-1 py-1 sm:px-1.5 sm:py-1.5 transition-colors focus-within:border-border-hover shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)]">
                 {/* + button */}
                 <button
                   type="button"
@@ -506,7 +518,7 @@ export default function App() {
                     }
                   }}
                   placeholder={docsLoaded ? "Ask anything" : "Upload a document to start..."}
-                  className="flex-1 bg-transparent border-none outline-none text-text-primary text-[15px] placeholder:text-text-secondary/50 px-3"
+                  className="flex-1 bg-transparent border-none outline-none text-text-primary text-sm sm:text-[15px] placeholder:text-text-secondary/50 px-2 sm:px-3"
                 />
 
                 {/* Send button */}
@@ -532,21 +544,21 @@ export default function App() {
 
             {/* File info chips */}
             {docsLoaded && (
-              <div className="flex items-center gap-2 mt-6 flex-wrap justify-center animate-fade-in animate-delay-200">
+              <div className="flex items-center gap-1.5 sm:gap-2 mt-4 sm:mt-6 flex-wrap justify-center animate-fade-in animate-delay-200 px-2">
                 {filenames.map((name, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface border border-border text-[12px] text-text-secondary shadow-sm">
-                    <FileText className="w-3.5 h-3.5 text-accent opacity-80" />
-                    {name}
+                  <span key={i} className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-surface border border-border text-[11px] sm:text-[12px] text-text-secondary shadow-sm">
+                    <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-accent opacity-80" />
+                    <span className="truncate max-w-[120px] sm:max-w-none">{name}</span>
                   </span>
                 ))}
-                <span className="text-[12px] text-text-secondary/40 font-medium px-1">{chunkCount} chunks</span>
+                <span className="text-[11px] sm:text-[12px] text-text-secondary/40 font-medium px-1">{chunkCount} chunks</span>
               </div>
             )}
           </div>
         ) : (
           /* ========== CHAT VIEW ========== */
           <>
-            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 sm:py-8 custom-scrollbar overscroll-contain">
               <div className="max-w-3xl mx-auto space-y-6">
                 {/* Summary panel */}
                 {showSummary && summary && (
@@ -578,9 +590,9 @@ export default function App() {
             </div>
 
             {/* ---- Bottom input bar ---- */}
-            <div className="w-full bg-gradient-to-t from-background via-background/95 to-transparent pt-4 pb-4 sm:pt-6 sm:pb-6 px-3 sm:px-4">
+            <div className="w-full bg-gradient-to-t from-background via-background/95 to-transparent pt-3 pb-3 sm:pt-6 sm:pb-6 px-3 sm:px-4 pb-safe">
               <div className="max-w-3xl mx-auto">
-                <div className="flex items-end bg-surface border border-border rounded-2xl px-2 py-2 transition-colors focus-within:border-border-hover shadow-lg">
+                <div className="flex items-end bg-surface border border-border rounded-2xl px-1.5 sm:px-2 py-1.5 sm:py-2 transition-colors focus-within:border-border-hover shadow-lg">
                   {/* + button */}
                   <button
                     type="button"
@@ -602,7 +614,7 @@ export default function App() {
                     placeholder="Message RAG Assistant..."
                     disabled={chatLoading}
                     rows={1}
-                    className="flex-1 bg-transparent border-none outline-none text-text-primary text-[15px] placeholder:text-text-secondary/50 px-3 py-2.5 resize-none min-h-[44px] max-h-[300px] focus:outline-none focus-visible:ring-0 custom-scrollbar"
+                    className="flex-1 bg-transparent border-none outline-none text-text-primary text-sm sm:text-[15px] placeholder:text-text-secondary/50 px-2 sm:px-3 py-2 sm:py-2.5 resize-none min-h-[40px] sm:min-h-[44px] max-h-[200px] sm:max-h-[300px] focus:outline-none focus-visible:ring-0 custom-scrollbar"
                   />
 
                   {/* Send */}
@@ -620,8 +632,8 @@ export default function App() {
                     {chatLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-center text-[11px] text-text-secondary/40 mt-3 font-medium">
-                  Answers generated by RAG Engine · Content strict formulation enabled 
+                <p className="text-center text-[10px] sm:text-[11px] text-text-secondary/40 mt-2 sm:mt-3 font-medium">
+                  Answers generated by RAG Engine · Powered by document context
                 </p>
               </div>
             </div>
@@ -727,6 +739,15 @@ export default function App() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Toast notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );

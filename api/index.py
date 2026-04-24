@@ -163,11 +163,12 @@ class handler(BaseHTTPRequestHandler):
 
             chunks = session["chunks"]
             embeddings = session["embeddings"]
+            session_filenames = session.get("filenames", [])
 
             query_embedding = get_embeddings([question], api_key=api_key)[0]
             semantic_chunks, early_chunks = retrieve_chunks(query_embedding, chunks, embeddings)
             context = build_context(semantic_chunks, early_chunks)
-            answer = generate_answer(question, context, history, api_key=api_key)
+            answer = generate_answer(question, context, history, api_key=api_key, filenames=session_filenames)
 
             sources = []
             for ec in early_chunks:
