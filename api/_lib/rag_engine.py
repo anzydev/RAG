@@ -327,6 +327,50 @@ Provide your answer based ONLY on the document context above:"""
 
 
 # =====================================================================
+#  CHAT TITLE GENERATION
+# =====================================================================
+
+def generate_chat_title(question: str, answer: str, api_key: str | None = None) -> str:
+    """Generate a concise 2-3 word title for a chat based on the first Q&A.
+    
+    Returns a short descriptive title like "Explaining Photosynthesis" or "Resume Tips".
+    Falls back to a truncated question if the LLM call fails.
+    """
+    client = _get_client(api_key)
+
+    try:
+        response = client.chat.completions.create(
+            model=CHAT_MODEL,
+            max_tokens=20,
+            temperature=0.3,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You generate ultra-short chat titles. "
+                        "Reply with ONLY 2-3 words that describe the topic. "
+                        "No punctuation, no quotes, no explanation. Just the title words."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"User asked: {question[:200]}\nAI answered about: {answer[:300]}\n\nGenerate a 2-3 word title:"
+                },
+            ],
+        )
+        title = response.choices[0].message.content.strip().strip('"\'')
+        # Enforce max 3 words
+        words = title.split()
+        if len(words) > 3:
+            title = " ".join(words[:3])
+        return title if title else question[:25]
+    except Exception:
+        # Fallback: first 2-3 meaningful words from the question
+        words = [w for w in question.split() if len(w) > 2][:3]
+        return " ".join(words) if words else "New Chat"
+
+
+# =====================================================================
 #  AI SUMMARY GENERATION
 # =====================================================================
 

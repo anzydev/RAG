@@ -2,7 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "@/components/ui/chat-message";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { Toast } from "@/components/ui/toast";
+import { MicButton } from "@/components/ui/mic-button";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import {
@@ -16,7 +18,10 @@ import {
   Check,
   Trash2,
   MessageSquare,
-  Menu
+  Menu,
+  Star,
+  Pencil,
+  AlertTriangle
 } from "lucide-react";
 
 // ---- Helpers ----
@@ -53,6 +58,7 @@ interface ChatThread {
   filenames: string[];
   chunkCount: number;
   updatedAt: number;
+  isImportant?: boolean;
 }
 
 // ---- App ----
@@ -85,6 +91,15 @@ export default function App() {
   // Mobile sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Editing thread name
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Switch-chat warning modal
+  const [showSwitchWarning, setShowSwitchWarning] = useState(false);
+  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
+
   // Toast notifications (replaces native alert())
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" | "info" } | null>(null);
   const showToast = useCallback((message: string, type: "error" | "success" | "info" = "error") => {
@@ -97,6 +112,32 @@ export default function App() {
     minHeight: 24,
     maxHeight: 200,
   });
+
+  // Speech recognition
+  const {
+    isSupported: micSupported,
+    isListening,
+    transcript,
+    interimTranscript,
+    error: micError,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useSpeechRecognition();
+
+  // Sync speech transcript → input box
+  useEffect(() => {
+    if (transcript) {
+      setInputValue(transcript);
+      adjustHeight();
+      resetTranscript();
+    }
+  }, [transcript, adjustHeight, resetTranscript]);
+
+  // Show mic errors as toasts
+  useEffect(() => {
+    if (micError) showToast(micError, "error");
+  }, [micError, showToast]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -184,8 +225,12 @@ export default function App() {
         } as ChatThread);
       }
       
-      // Sort by recently updated
-      next.sort((a, b) => b.updatedAt - a.updatedAt);
+      // Sort: important first, then by recently updated
+      next.sort((a, b) => {
+        if (a.isImportant && !b.isImportant) return -1;
+        if (!a.isImportant && b.isImportant) return 1;
+        return b.updatedAt - a.updatedAt;
+      });
       
       // Maintain strictly rolling 5 limit max
       if (next.length > 5) {
@@ -198,6 +243,67 @@ export default function App() {
   const deleteThread = (id: string) => {
     setThreads(prev => prev.filter(t => t.id !== id));
     if (activeThreadId === id) setActiveThreadId(null);
+  };
+
+  const toggleImportant = (id: string) => {
+    setThreads(prev => {
+      const next = prev.map(t => t.id === id ? { ...t, isImportant: !t.isImportant } : t);
+      // Re-sort after toggling
+      next.sort((a, b) => {
+        if (a.isImportant && !b.isImportant) return -1;
+        if (!a.isImportant && b.isImportant) return 1;
+        return b.updatedAt - a.updatedAt;
+      });
+      return next;
+    });
+  };
+
+  // Chat switch with document warning
+  const requestSwitchThread = (targetId: string | null) => {
+    // If switching away from a chat that has documents, warn user
+    if (activeThread?.sessionId && targetId !== activeThreadId) {
+      setPendingSwitchId(targetId);
+      setShowSwitchWarning(true);
+    } else {
+      setActiveThreadId(targetId);
+      setShowSummary(false);
+      setSummary(null);
+      setSidebarOpen(false);
+    }
+  };
+
+  const confirmSwitch = () => {
+    setActiveThreadId(pendingSwitchId);
+    setShowSummary(false);
+    setSummary(null);
+    setSidebarOpen(false);
+    setShowSwitchWarning(false);
+    setPendingSwitchId(null);
+  };
+
+  const cancelSwitch = () => {
+    setShowSwitchWarning(false);
+    setPendingSwitchId(null);
+  };
+
+  // Inline rename helpers
+  const startEditing = (threadId: string, currentTitle: string) => {
+    setEditingThreadId(threadId);
+    setEditingTitle(currentTitle);
+    setTimeout(() => editInputRef.current?.focus(), 50);
+  };
+
+  const saveEdit = () => {
+    if (editingThreadId && editingTitle.trim()) {
+      updateThread({ id: editingThreadId, title: editingTitle.trim() });
+    }
+    setEditingThreadId(null);
+    setEditingTitle("");
+  };
+
+  const cancelEdit = () => {
+    setEditingThreadId(null);
+    setEditingTitle("");
   };
 
   // ---- Upload ----
@@ -287,7 +393,7 @@ export default function App() {
       const isFirstMessage = messages.length === 0;
       const newMessagesForUi = [...messages, { role: "user", content: question } as Message];
       
-      // Persist UI update first
+      // Persist UI update first — use a temp title until AI suggests one
       updateThread({
         id: activeThreadId,
         messages: newMessagesForUi,
@@ -304,6 +410,7 @@ export default function App() {
             question,
             session_id: sessionId,
             history: newMessagesForUi.slice(-6).map((m) => ({ role: m.role, content: m.content })),
+            is_first_message: isFirstMessage,
           }),
         });
         const data = await safeJson(res);
@@ -317,10 +424,16 @@ export default function App() {
             next[idx] = {
               ...next[idx],
               messages: [...next[idx].messages, { role: "assistant", content: data.answer, sources: data.sources }],
+              // Auto-rename with AI-suggested title on first message
+              title: data.suggested_title || next[idx].title,
               updatedAt: Date.now()
             };
-            // Resort threads
-            next.sort((a,b) => b.updatedAt - a.updatedAt);
+            // Resort threads (important first, then by date)
+            next.sort((a, b) => {
+              if (a.isImportant && !b.isImportant) return -1;
+              if (!a.isImportant && b.isImportant) return 1;
+              return b.updatedAt - a.updatedAt;
+            });
           }
           return next;
         });
@@ -404,12 +517,7 @@ export default function App() {
       )}>
         <div className="p-3 border-b border-border flex items-center gap-2">
           <button 
-            onClick={() => {
-               setActiveThreadId(null);
-               setShowSummary(false);
-               setSummary(null);
-               setSidebarOpen(false);
-            }}
+            onClick={() => requestSwitchThread(null)}
             className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 bg-text-primary text-background rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
           >
             <Plus className="w-4 h-4" />
@@ -429,28 +537,75 @@ export default function App() {
             <p className="text-[13px] text-text-secondary/60 px-2 mt-2">No history</p>
           )}
           {threads.map((t) => (
-            <button
+            <div
               key={t.id}
-              onClick={() => { setActiveThreadId(t.id); setSidebarOpen(false); }}
+              onClick={() => { if (editingThreadId !== t.id) requestSwitchThread(t.id); }}
               className={cn(
-                "w-full flex items-center justify-between group px-3 py-2.5 rounded-xl text-[13px] transition-all",
+                "w-full flex items-center justify-between group px-3 py-2.5 rounded-xl text-[13px] transition-all cursor-pointer",
                 activeThreadId === t.id 
                   ? "bg-accent/15 text-accent font-medium shadow-[inset_0_1px_rgba(255,255,255,0.05)]" 
                   : "hover:bg-white/5 text-text-secondary hover:text-text-primary font-normal"
               )}
             >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <MessageSquare className="w-4 h-4 shrink-0 opacity-70" />
-                <span className="truncate text-left">{t.title}</span>
+              <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
+                {/* Star icon for important */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleImportant(t.id); }}
+                  className={cn(
+                    "shrink-0 p-0.5 rounded transition-all",
+                    t.isImportant 
+                      ? "text-amber-400 opacity-100" 
+                      : "text-text-secondary/40 opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                  )}
+                  title={t.isImportant ? "Unmark important" : "Mark as important"}
+                >
+                  <Star className={cn("w-3.5 h-3.5", t.isImportant && "fill-amber-400")} />
+                </button>
+
+                {/* Inline edit or title display */}
+                {editingThreadId === t.id ? (
+                  <input
+                    ref={editInputRef}
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
+                      if (e.key === "Escape") cancelEdit();
+                    }}
+                    onBlur={saveEdit}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 bg-background/80 border border-accent/40 rounded-md px-2 py-0.5 text-[13px] text-text-primary outline-none focus:border-accent min-w-0"
+                  />
+                ) : (
+                  <span
+                    className="truncate text-left"
+                    onDoubleClick={(e) => { e.stopPropagation(); startEditing(t.id, t.title); }}
+                  >
+                    {t.title}
+                  </span>
+                )}
               </div>
-              <div 
-                onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-white/10 rounded-md transition-all shrink-0 -mr-1"
-                title="Delete this chat"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-text-secondary hover:text-red-400" />
-              </div>
-            </button>
+
+              {/* Action buttons */}
+              {editingThreadId !== t.id && (
+                <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all -mr-1">
+                  <div
+                    onClick={(e) => { e.stopPropagation(); startEditing(t.id, t.title); }}
+                    className="p-1.5 hover:bg-white/10 rounded-md transition-all"
+                    title="Rename chat"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-text-secondary hover:text-text-primary" />
+                  </div>
+                  <div 
+                    onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                    className="p-1.5 hover:bg-white/10 rounded-md transition-all"
+                    title="Delete this chat"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-text-secondary hover:text-red-400" />
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
         </div>
         {/* API logic shifted to bottom of sidebar */}
@@ -509,7 +664,7 @@ export default function App() {
                 {/* Text input */}
                 <input
                   type="text"
-                  value={inputValue}
+                  value={isListening && interimTranscript ? interimTranscript : inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -517,8 +672,22 @@ export default function App() {
                       handleSubmit();
                     }
                   }}
-                  placeholder={docsLoaded ? "Ask anything" : "Upload a document to start..."}
-                  className="flex-1 bg-transparent border-none outline-none text-text-primary text-sm sm:text-[15px] placeholder:text-text-secondary/50 px-2 sm:px-3"
+                  placeholder={isListening ? "Listening…" : docsLoaded ? "Ask anything" : "Upload a document to start..."}
+                  className={cn(
+                    "flex-1 bg-transparent border-none outline-none text-sm sm:text-[15px] px-2 sm:px-3",
+                    isListening && interimTranscript
+                      ? "text-text-secondary/70 placeholder:text-text-secondary/50"
+                      : "text-text-primary placeholder:text-text-secondary/50"
+                  )}
+                />
+
+                {/* Mic button */}
+                <MicButton
+                  isListening={isListening}
+                  isSupported={micSupported}
+                  disabled={chatLoading}
+                  onStart={startListening}
+                  onStop={stopListening}
                 />
 
                 {/* Send button */}
@@ -605,16 +774,29 @@ export default function App() {
                   {/* Textarea */}
                   <textarea
                     ref={textareaRef}
-                    value={inputValue}
+                    value={isListening && interimTranscript ? interimTranscript : inputValue}
                     onChange={(e) => {
                       setInputValue(e.target.value);
                       adjustHeight();
                     }}
                     onKeyDown={handleKeyDown}
-                    placeholder="Message RAG Assistant..."
+                    placeholder={isListening ? "Listening…" : "Message RAG Assistant..."}
                     disabled={chatLoading}
                     rows={1}
-                    className="flex-1 bg-transparent border-none outline-none text-text-primary text-sm sm:text-[15px] placeholder:text-text-secondary/50 px-2 sm:px-3 py-2 sm:py-2.5 resize-none min-h-[40px] sm:min-h-[44px] max-h-[200px] sm:max-h-[300px] focus:outline-none focus-visible:ring-0 custom-scrollbar"
+                    className={cn(
+                      "flex-1 bg-transparent border-none outline-none text-sm sm:text-[15px] px-2 sm:px-3 py-2 sm:py-2.5 resize-none min-h-[40px] sm:min-h-[44px] max-h-[200px] sm:max-h-[300px] focus:outline-none focus-visible:ring-0 custom-scrollbar placeholder:text-text-secondary/50",
+                      isListening && interimTranscript ? "text-text-secondary/70" : "text-text-primary"
+                    )}
+                  />
+
+                  {/* Mic button */}
+                  <MicButton
+                    isListening={isListening}
+                    isSupported={micSupported}
+                    disabled={chatLoading}
+                    onStart={startListening}
+                    onStop={stopListening}
+                    className="mb-0.5"
                   />
 
                   {/* Send */}
@@ -737,6 +919,40 @@ export default function App() {
             <p className="text-[13px] text-text-secondary font-medium pl-1">
               {uploadProgress < 30 ? "Extracting text structure..." : uploadProgress < 60 ? "Indexing chunks..." : uploadProgress < 85 ? "Deploying embeddings (this takes a moment)..." : "Finalizing..."}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Switch-chat warning modal */}
+      {showSwitchWarning && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm" onClick={cancelSwitch}>
+          <div
+            className="bg-surface border border-border rounded-2xl p-6 max-w-md w-full mx-4 animate-fade-in shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center border border-amber-500/20">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <h3 className="text-text-primary font-semibold text-lg">Switch Chat?</h3>
+            </div>
+            <p className="text-[13px] text-text-secondary leading-relaxed mb-6 ml-[3.25rem]">
+              Your uploaded document history is tied to the current chat session. Switching chats may require re-uploading documents for the new conversation.
+            </p>
+            <div className="flex gap-2 ml-[3.25rem]">
+              <button
+                onClick={confirmSwitch}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
+              >
+                Continue
+              </button>
+              <button
+                onClick={cancelSwitch}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:border-border-hover text-text-secondary hover:text-text-primary text-sm font-medium transition-colors"
+              >
+                Stay Here
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -17,7 +17,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from _lib.rag_engine import extract_and_chunk, get_embeddings, retrieve_chunks, build_context, generate_answer, generate_summary
+from _lib.rag_engine import extract_and_chunk, get_embeddings, retrieve_chunks, build_context, generate_answer, generate_summary, generate_chat_title
 from _lib.session_store import save_session, load_session, cleanup_expired_sessions
 from _lib.config import MAX_FILE_SIZE_BYTES, MAX_FILES_PER_UPLOAD
 
@@ -146,6 +146,7 @@ class handler(BaseHTTPRequestHandler):
             question = data.get("question", "")
             session_id = data.get("session_id", "")
             history = data.get("history", [])
+            is_first_message = data.get("is_first_message", False)
             api_key = self._get_api_key()
 
             if not question:
@@ -176,10 +177,22 @@ class handler(BaseHTTPRequestHandler):
             for sc in semantic_chunks:
                 sources.append({"text": sc["text"], "page": sc.get("page", "?"), "source": sc.get("source", "unknown")})
 
-            self._send_json(200, {
+            # Generate a short title for the chat if this is the first message
+            suggested_title = None
+            if is_first_message:
+                try:
+                    suggested_title = generate_chat_title(question, answer, api_key=api_key)
+                except Exception:
+                    pass
+
+            response_data = {
                 "answer": answer,
                 "sources": sources,
-            })
+            }
+            if suggested_title:
+                response_data["suggested_title"] = suggested_title
+
+            self._send_json(200, response_data)
 
         except Exception as e:
             self._send_json(500, {"error": str(e)})

@@ -22,7 +22,7 @@ import email.policy
 # Add project root to path so we can import api._lib
 sys.path.insert(0, os.path.dirname(__file__))
 
-from api._lib.rag_engine import extract_and_chunk, get_embeddings, retrieve_chunks, build_context, generate_answer, generate_summary
+from api._lib.rag_engine import extract_and_chunk, get_embeddings, retrieve_chunks, build_context, generate_answer, generate_summary, generate_chat_title
 from api._lib.session_store import save_session, load_session, cleanup_expired_sessions
 from api._lib.config import MAX_FILE_SIZE_BYTES, MAX_FILES_PER_UPLOAD
 
@@ -169,6 +169,7 @@ class DevHandler(BaseHTTPRequestHandler):
             question = data.get("question", "")
             session_id = data.get("session_id", "")
             history = data.get("history", [])
+            is_first_message = data.get("is_first_message", False)
             api_key = self._get_api_key()
 
             if not question:
@@ -207,10 +208,23 @@ class DevHandler(BaseHTTPRequestHandler):
 
             print(f"  → Answer generated ({len(answer)} chars)")
 
-            self._send_json(200, {
+            # Generate a short title for the chat if this is the first message
+            suggested_title = None
+            if is_first_message:
+                try:
+                    suggested_title = generate_chat_title(question, answer, api_key=api_key)
+                    print(f"  → Suggested title: {suggested_title}")
+                except Exception as e:
+                    print(f"  ⚠ Title generation failed: {e}")
+
+            response_data = {
                 "answer": answer,
                 "sources": sources,
-            })
+            }
+            if suggested_title:
+                response_data["suggested_title"] = suggested_title
+
+            self._send_json(200, response_data)
 
         except Exception as e:
             print(f"  ✗ Chat error: {e}")
